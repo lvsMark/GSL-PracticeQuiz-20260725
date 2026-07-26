@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPA GSL Mock Exam — Review</title>
+<style>
+  :root{
+    --navy:#1F4E79;
+    --navy-dark:#163a5c;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --text:#26313d;
+    --muted:#5b6570;
+    --green:#1f7a1f;
+    --green-bg:#e6f4e6;
+    --red:#b3261e;
+    --red-bg:#fdecea;
+    --border:#dfe4ea;
+    --amber:#a8710a;
+    --amber-bg:#fdf3e0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:linear-gradient(135deg,var(--navy),var(--navy-dark));
+    color:#fff;
+    padding:22px 16px 18px;
+    text-align:center;
+  }
+  header h1{margin:0 0 4px;font-size:1.5rem;}
+  header p{margin:0;opacity:.85;font-size:.9rem;}
+  .wrap{max-width:820px;margin:0 auto;padding:16px;}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .back-link{
+    display:inline-flex;align-items:center;gap:6px;
+    color:var(--navy);text-decoration:none;font-weight:600;font-size:.9rem;
+    padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:#fff;
+  }
+  .back-link:hover{border-color:var(--navy);}
+  .summary{color:var(--muted);font-size:.9rem;}
+  .panel{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:18px;
+    margin-bottom:16px;
+    box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .filter-chip{
+    padding:7px 14px;border-radius:20px;border:1px solid var(--border);
+    background:#fff;cursor:pointer;font-size:.82rem;color:var(--text);text-decoration:none;
+  }
+  .filter-chip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .review-row{border:1px solid var(--border);border-radius:10px;margin-bottom:10px;padding:12px 14px;cursor:pointer;background:#fff;}
+  .review-row:hover{border-color:var(--navy);}
+  .review-row .rr-top{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:.78rem;color:var(--muted);}
+  .review-row .rr-icon{font-weight:700;}
+  .review-row.correct .rr-icon{color:var(--green);}
+  .review-row.incorrect .rr-icon{color:var(--red);}
+  .review-row .rr-stem{margin-top:6px;font-size:.95rem;font-weight:600;line-height:1.4;}
+  .review-detail{display:none;margin-top:12px;border-top:1px dashed var(--border);padding-top:12px;font-size:.88rem;line-height:1.5;}
+  .review-detail.open{display:block;}
+  .review-detail .opt-line{padding:8px 10px;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--border);}
+  .review-detail .opt-line.correctopt{background:var(--green-bg);color:var(--green);font-weight:600;border-color:var(--green);}
+  .review-detail .opt-line.pickedwrong{background:var(--red-bg);color:var(--red);font-weight:600;border-color:var(--red);}
+  .review-detail .expl{margin-top:10px;}
+  .review-detail .quote{font-style:italic;color:var(--muted);margin-top:8px;}
+  .review-detail .src{color:var(--muted);font-size:.78rem;margin-top:8px;}
+  .empty-state{text-align:center;color:var(--muted);padding:50px 20px;}
+  footer{text-align:center;padding:24px 16px 40px;color:var(--muted);font-size:.78rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="pageTitle">Review</h1>
+  <p id="pageSubtitle">CPA GSL Mock Exam Practice</p>
+</header>
+
+<div class="wrap">
+  <div class="toolbar">
+    <a class="back-link" href="index.html">&larr; Back to quiz</a>
+    <span class="summary" id="summaryText"></span>
+  </div>
+
+  <div class="filter-row">
+    <a class="filter-chip" id="chipAnswered" href="review.html?type=answered">All answered</a>
+    <a class="filter-chip" id="chipFlagged" href="review.html?type=flagged">Currently flagged (wrong)</a>
+  </div>
+
+  <div class="panel" id="listPanel">
+    <div id="reviewList"></div>
+  </div>
+</div>
+
+<footer>
+  CPA Global Strategy and Leadership — self-study practice tool.<br>
+  Progress is stored locally in your browser only.
+</footer>
+
+<script src="quiz-data.js"></script>
+<script>
+const LS_KEY = "cpa_gsl_progress_all_v1";
+
+function loadProgress(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { attempts:{}, bestScore:null };
+}
+
+function formatSource(q){
+  var parts = [];
+  if(q.source) parts.push(q.source);
+  if(q.reference) parts.push(q.reference);
+  var main = parts.join(' — ');
+  var extra = [];
+  if(q.topic) extra.push('Topic: ' + q.topic);
+  if(q.bank) extra.push(q.bank + (q.orig_n ? ' (Q' + q.orig_n + ')' : ''));
+  var extraStr = extra.join(' · ');
+  return 'Source: ' + main + (main && extraStr ? ' · ' : '') + extraStr;
+}
+
+const params = new URLSearchParams(window.location.search);
+const type = params.get('type') === 'flagged' ? 'flagged' : 'answered';
+
+document.getElementById(type === 'flagged' ? 'chipFlagged' : 'chipAnswered').classList.add('active');
+
+const progress = loadProgress();
+let entries = Object.entries(progress.attempts || {});
+if(type === 'flagged'){
+  entries = entries.filter(function(e){ return !e[1].lastCorrect; });
+}
+entries.sort(function(a,b){ return Number(a[0]) - Number(b[0]); });
+
+document.getElementById('pageTitle').textContent = type === 'flagged' ? 'Currently Flagged Questions' : 'Answered Questions (All-Time)';
+document.getElementById('pageSubtitle').textContent = 'CPA GSL Mock Exam Practice — 409 Questions';
+document.title = (type === 'flagged' ? 'Flagged Questions' : 'Answered Questions') + ' — CPA GSL Mock Exam';
+
+document.getElementById('summaryText').textContent = entries.length
+  ? (entries.length + (entries.length === 1 ? ' question' : ' questions'))
+  : '';
+
+const list = document.getElementById('reviewList');
+
+if(entries.length === 0){
+  const empty = document.createElement('div');
+  empty.className = 'empty-state';
+  empty.textContent = type === 'flagged'
+    ? 'No flagged questions right now, nice work! Answer some questions incorrectly and they will show up here.'
+    : 'No questions answered yet. Go back to the quiz and start a practice session.';
+  list.appendChild(empty);
+} else {
+  entries.forEach(function(entry){
+    const qn = Number(entry[0]);
+    const att = entry[1];
+    const q = QUIZ_DATA.find(function(x){ return x.n === qn; });
+    if(!q) return;
+
+    const row = document.createElement('div');
+    row.className = 'review-row ' + (att.lastCorrect ? 'correct' : 'incorrect');
+
+    const top = document.createElement('div');
+    top.className = 'rr-top';
+    const pickedLabel = att.lastPicked ? ('You answered ' + att.lastPicked) : '';
+    top.innerHTML = '<span><span class="rr-icon">' + (att.lastCorrect ? '✔' : '✘') + '</span> Q' + q.n + ' &middot; ' + q.module + (pickedLabel ? ' &middot; ' + pickedLabel : '') + '</span>';
+
+    const stemEl = document.createElement('div');
+    stemEl.className = 'rr-stem';
+    stemEl.textContent = q.stem;
+
+    const detail = document.createElement('div');
+    detail.className = 'review-detail';
+    const letters = ['A','B','C','D'];
+    let optsHtml = '';
+    letters.forEach(function(letter, idx){
+      let cls = '';
+      if(letter === q.correct) cls = 'correctopt';
+      else if(letter === att.lastPicked) cls = 'pickedwrong';
+      optsHtml += '<div class="opt-line ' + cls + '">' + letter + '. ' + q.options[idx] + '</div>';
+    });
+    const quoteHtml = q.quote ? ('<p class="quote">“' + q.quote + '”</p>') : '';
+    detail.innerHTML = optsHtml
+      + '<p class="expl">' + q.explanation + '</p>'
+      + quoteHtml
+      + '<p class="src">' + formatSource(q) + '</p>';
+
+    row.appendChild(top);
+    row.appendChild(stemEl);
+    row.appendChild(detail);
+    row.addEventListener('click', function(){ detail.classList.toggle('open'); });
+    list.appendChild(row);
+  });
+}
+</script>
+</body>
+</html>
