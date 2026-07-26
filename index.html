@@ -142,7 +142,28 @@
     header h1{font-size:1.25rem;}
     .stat .num{font-size:1.1rem;}
   }
-</style>
+.stat.clickable{cursor:pointer;transition:.12s;}
+  .stat.clickable:hover{background:#e9edf3;}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(20,30,45,.55);z-index:80;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:#fff;border-radius:12px;max-width:760px;width:100%;padding:22px;position:relative;}
+  .modal-box h3{margin:0 0 4px;padding-right:30px;}
+  .modal-sub{color:var(--muted);font-size:.85rem;margin:0 0 16px;}
+  .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--muted);line-height:1;}
+  .modal-close:hover{color:var(--text);}
+  .modal-empty{color:var(--muted);font-size:.9rem;padding:24px 0;text-align:center;}
+  .review-row{border:1px solid var(--border);border-radius:10px;margin-bottom:8px;padding:10px 12px;cursor:pointer;}
+  .review-row:hover{border-color:var(--navy);}
+  .review-row .rr-top{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:.78rem;color:var(--muted);}
+  .review-row.correct .rr-icon{color:var(--green);}
+  .review-row.incorrect .rr-icon{color:var(--red);}
+  .review-row .rr-stem{margin-top:4px;font-size:.92rem;font-weight:600;}
+  .review-detail{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;font-size:.85rem;}
+  .review-detail.open{display:block;}
+  .review-detail .opt-line{padding:5px 9px;border-radius:6px;margin-bottom:4px;border:1px solid transparent;}
+  .review-detail .opt-line.correctopt{background:var(--green-bg);color:var(--green);font-weight:600;border-color:var(--green);}
+  .review-detail .opt-line.pickedwrong{background:var(--red-bg);color:var(--red);font-weight:600;border-color:var(--red);}
+  </style>
 </head>
 <body>
 
@@ -177,10 +198,19 @@
     </div>
 
     <div class="stat-grid">
-      <div class="stat"><div class="num" id="statAttempted">0</div><div class="lbl">Answered (all-time)</div></div>
+      <div class="stat clickable" id="statAttemptedBox" title="Click to see which questions you've answered"><div class="num" id="statAttempted">0</div><div class="lbl">Answered (all-time)</div></div>
       <div class="stat"><div class="num" id="statAccuracy">–</div><div class="lbl">Accuracy (all-time)</div></div>
-      <div class="stat"><div class="num" id="statMissed">0</div><div class="lbl">Currently flagged</div></div>
+      <div class="stat clickable" id="statMissedBox" title="Click to see your flagged questions"><div class="num" id="statMissed">0</div><div class="lbl">Currently flagged</div></div>
       <div class="stat"><div class="num" id="statBest">–</div><div class="lbl">Best session score</div></div>
+    </div>
+
+    <div class="modal-overlay" id="statModalOverlay">
+      <div class="modal-box">
+        <button class="modal-close" id="statModalClose">&times;</button>
+        <h3 id="statModalTitle">Answered questions</h3>
+        <p class="modal-sub" id="statModalSub"></p>
+        <div id="statModalList"></div>
+      </div>
     </div>
   </div>
 
@@ -305,6 +335,86 @@ function updateStatsPanel(){
 }
 updateStatsPanel();
 
+function closeStatModal(){
+  document.getElementById('statModalOverlay').classList.remove('open');
+}
+function openStatModal(type){
+  var entries = Object.entries(progress.attempts);
+  if(type === 'flagged'){
+    entries = entries.filter(function(e){ return !e[1].lastCorrect; });
+  }
+  entries.sort(function(a,b){ return Number(a[0]) - Number(b[0]); });
+
+  document.getElementById('statModalTitle').textContent = type === 'flagged'
+    ? 'Currently flagged questions'
+    : 'Answered questions (all-time)';
+  document.getElementById('statModalSub').textContent = entries.length
+    ? (entries.length + (type === 'flagged'
+        ? ' question(s) currently marked wrong. Tap a row to see the full question, or use "Review missed questions only" to practice these.'
+        : ' question(s) answered so far, across all sessions. Tap a row to see the full question.'))
+    : '';
+
+  var list = document.getElementById('statModalList');
+  list.innerHTML = '';
+  if(entries.length === 0){
+    var empty = document.createElement('div');
+    empty.className = 'modal-empty';
+    empty.textContent = type === 'flagged' ? 'No flagged questions right now, nice work!' : 'No questions answered yet.';
+    list.appendChild(empty);
+  }
+  entries.forEach(function(entry){
+    var qn = Number(entry[0]);
+    var att = entry[1];
+    var q = QUIZ_DATA.find(function(x){ return x.n === qn; });
+    if(!q) return;
+
+    var row = document.createElement('div');
+    row.className = 'review-row ' + (att.lastCorrect ? 'correct' : 'incorrect');
+
+    var top = document.createElement('div');
+    top.className = 'rr-top';
+    var pickedLabel = att.lastPicked ? ('You answered ' + att.lastPicked) : '';
+    top.innerHTML = '<span class="rr-icon">' + (att.lastCorrect ? '✔' : '✘') + '</span><span>Q' + q.n + ' \u00b7 ' + q.module + (pickedLabel ? ' \u00b7 ' + pickedLabel : '') + '</span>';
+
+    var stemEl = document.createElement('div');
+    stemEl.className = 'rr-stem';
+    stemEl.textContent = q.stem;
+
+    var detail = document.createElement('div');
+    detail.className = 'review-detail';
+    var letters = ['A','B','C','D'];
+    var optsHtml = '';
+    letters.forEach(function(letter, idx){
+      var cls = '';
+      if(letter === q.correct) cls = 'correctopt';
+      else if(letter === att.lastPicked) cls = 'pickedwrong';
+      optsHtml += '<div class="opt-line ' + cls + '">' + letter + '. ' + q.options[idx] + '</div>';
+    });
+    var quoteHtml = q.quote ? ('<p class="quote" style="font-style:italic;color:var(--muted);">\u201c' + q.quote + '\u201d</p>') : '';
+    detail.innerHTML = optsHtml
+      + '<p style="margin-top:8px;">' + q.explanation + '</p>'
+      + quoteHtml
+      + '<p class="src" style="color:var(--muted);font-size:.8rem;">' + formatSource(q) + '</p>';
+
+    row.appendChild(top);
+    row.appendChild(stemEl);
+    row.appendChild(detail);
+    row.addEventListener('click', function(){ detail.classList.toggle('open'); });
+    list.appendChild(row);
+  });
+
+  document.getElementById('statModalOverlay').classList.add('open');
+}
+document.getElementById('statAttemptedBox').addEventListener('click', function(){ openStatModal('answered'); });
+document.getElementById('statMissedBox').addEventListener('click', function(){ openStatModal('flagged'); });
+document.getElementById('statModalClose').addEventListener('click', closeStatModal);
+document.getElementById('statModalOverlay').addEventListener('click', function(e){
+  if(e.target.id === 'statModalOverlay') closeStatModal();
+});
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') closeStatModal();
+});
+
 // ---- Quiz session state ----
 let session = { questions:[], idx:0, score:0, answered:[], picked:null };
 
@@ -414,7 +524,7 @@ function selectOption(letter){
   if(correct) session.score++;
   session.answered.push({ n:q.n, correct: correct });
 
-  progress.attempts[q.n] = { lastCorrect: correct, ts: Date.now() };
+  progress.attempts[q.n] = { lastCorrect: correct, lastPicked: letter, ts: Date.now() };
   saveProgress(progress);
 
   document.getElementById('nextBtn').disabled = false;
