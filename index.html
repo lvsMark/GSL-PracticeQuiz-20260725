@@ -132,8 +132,11 @@
   #resultScreen{display:none;text-align:center;}
   #resultScreen .bigscore{font-size:2.6rem;font-weight:800;color:var(--navy);margin:10px 0;}
   .flag-btn{
-    background:none;border:none;cursor:pointer;font-size:1.1rem;color:#c9a227;
+    background:none;border:none;cursor:pointer;font-size:1.25rem;color:#b7bec7;
+    line-height:1;padding:2px 4px;
   }
+  .flag-btn.active{color:#c9a227;}
+  .flag-btn:hover{color:#c9a227;}
   .review-list{text-align:left;margin-top:14px;}
   .review-item{padding:10px;border-bottom:1px solid var(--border);font-size:.85rem;}
   .review-item.wrong{color:var(--red);}
@@ -180,6 +183,7 @@
       <div class="stat clickable" id="statAttemptedBox" title="Open a page listing every question you've answered"><div class="num" id="statAttempted">0</div><div class="lbl">Answered (all-time)</div></div>
       <div class="stat"><div class="num" id="statAccuracy">–</div><div class="lbl">Accuracy (all-time)</div></div>
       <div class="stat clickable" id="statMissedBox" title="Open a page listing your flagged questions"><div class="num" id="statMissed">0</div><div class="lbl">Currently flagged</div></div>
+      <div class="stat clickable" id="statBookmarkedBox" title="Open a page listing your bookmarked questions"><div class="num" id="statBookmarked">0</div><div class="lbl">&#9733; Bookmarked</div></div>
       <div class="stat"><div class="num" id="statBest">–</div><div class="lbl">Best session score</div></div>
     </div>
   </div>
@@ -188,7 +192,10 @@
     <div class="progressbar"><div id="progressFill"></div></div>
     <div class="qmeta">
       <span id="qCounter">Question 1 of 10</span>
-      <span class="badge" id="qModuleBadge">Module 1</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span class="badge" id="qModuleBadge">Module 1</span>
+        <button class="flag-btn" id="bookmarkBtn" type="button" title="Bookmark this question">&#9734;</button>
+      </span>
     </div>
     <div class="stem" id="qStem"></div>
     <div id="optionsList"></div>
@@ -238,6 +245,7 @@ function saveProgress(p){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(p)); }catch(e){}
 }
 let progress = loadProgress();
+if(!progress.bookmarks) progress.bookmarks = {};
 
 const moduleChipsEl = document.getElementById('moduleChips');
 const modules = ["All", "Module 1", "Module 2", "Module 3", "Module 4", "Module 5", "Module 6", "Module 7"];
@@ -301,6 +309,7 @@ function updateStatsPanel(){
   document.getElementById('statAccuracy').textContent = attempted ? Math.round(100*correctCount/attempted)+'%' : '–';
   document.getElementById('statMissed').textContent = flagged;
   document.getElementById('statBest').textContent = progress.bestScore!==null ? progress.bestScore+'%' : '–';
+  document.getElementById('statBookmarked').textContent = Object.keys(progress.bookmarks || {}).length;
 }
 updateStatsPanel();
 
@@ -309,6 +318,28 @@ document.getElementById('statAttemptedBox').addEventListener('click', function()
 });
 document.getElementById('statMissedBox').addEventListener('click', function(){
   window.open('review.html?type=flagged', '_blank');
+});
+document.getElementById('statBookmarkedBox').addEventListener('click', function(){
+  window.open('review.html?type=bookmarked', '_blank');
+});
+function updateBookmarkBtn(){
+  var q = session.questions[session.idx];
+  var btn = document.getElementById('bookmarkBtn');
+  var isBookmarked = !!progress.bookmarks[q.n];
+  btn.classList.toggle('active', isBookmarked);
+  btn.innerHTML = isBookmarked ? '&#9733;' : '&#9734;';
+  btn.title = isBookmarked ? 'Remove bookmark' : 'Bookmark this question';
+}
+document.getElementById('bookmarkBtn').addEventListener('click', function(){
+  var q = session.questions[session.idx];
+  if(progress.bookmarks[q.n]){
+    delete progress.bookmarks[q.n];
+  } else {
+    progress.bookmarks[q.n] = true;
+  }
+  saveProgress(progress);
+  updateBookmarkBtn();
+  updateStatsPanel();
 });
 
 // ---- Quiz session state ----
@@ -361,6 +392,7 @@ function renderQuestion(){
   document.getElementById('qModuleBadge').textContent = q.module;
   document.getElementById('qStem').textContent = q.stem;
   document.getElementById('progressFill').style.width = (100*session.idx/session.questions.length)+'%';
+  updateBookmarkBtn();
 
   const list = document.getElementById('optionsList');
   list.innerHTML = '';

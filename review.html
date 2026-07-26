@@ -64,7 +64,14 @@
   .review-row .rr-icon{font-weight:700;}
   .review-row.correct .rr-icon{color:var(--green);}
   .review-row.incorrect .rr-icon{color:var(--red);}
+  .review-row.bookmarked .rr-icon{color:var(--amber);}
   .review-row .rr-stem{margin-top:6px;font-size:.95rem;font-weight:600;line-height:1.4;}
+  .bk-tag{color:var(--amber);font-weight:600;white-space:nowrap;}
+  .unbookmark-btn{
+    background:none;border:1px solid var(--border);border-radius:14px;
+    padding:3px 10px;font-size:.72rem;color:var(--muted);cursor:pointer;white-space:nowrap;
+  }
+  .unbookmark-btn:hover{border-color:var(--red);color:var(--red);}
   .review-detail{display:none;margin-top:12px;border-top:1px dashed var(--border);padding-top:12px;font-size:.88rem;line-height:1.5;}
   .review-detail.open{display:block;}
   .review-detail .opt-line{padding:8px 10px;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--border);}
@@ -93,6 +100,7 @@
   <div class="filter-row">
     <a class="filter-chip" id="chipAnswered" href="review.html?type=answered">All answered</a>
     <a class="filter-chip" id="chipFlagged" href="review.html?type=flagged">Currently flagged (wrong)</a>
+    <a class="filter-chip" id="chipBookmarked" href="review.html?type=bookmarked">&#9733; Bookmarked</a>
   </div>
 
   <div class="panel" id="listPanel">
@@ -114,7 +122,10 @@ function loadProgress(){
     const raw = localStorage.getItem(LS_KEY);
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { attempts:{}, bestScore:null };
+  return { attempts:{}, bestScore:null, bookmarks:{} };
+}
+function saveProgress(p){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(p)); }catch(e){}
 }
 
 function formatSource(q){
@@ -130,74 +141,133 @@ function formatSource(q){
 }
 
 const params = new URLSearchParams(window.location.search);
-const type = params.get('type') === 'flagged' ? 'flagged' : 'answered';
+const rawType = params.get('type');
+const type = (rawType === 'flagged' || rawType === 'bookmarked') ? rawType : 'answered';
 
-document.getElementById(type === 'flagged' ? 'chipFlagged' : 'chipAnswered').classList.add('active');
+const chipId = type === 'flagged' ? 'chipFlagged' : (type === 'bookmarked' ? 'chipBookmarked' : 'chipAnswered');
+document.getElementById(chipId).classList.add('active');
 
 const progress = loadProgress();
-let entries = Object.entries(progress.attempts || {});
-if(type === 'flagged'){
-  entries = entries.filter(function(e){ return !e[1].lastCorrect; });
+if(!progress.bookmarks) progress.bookmarks = {};
+
+let entries;
+if(type === 'bookmarked'){
+  entries = Object.keys(progress.bookmarks).map(function(k){ return [k, progress.attempts[k] || null]; });
+} else {
+  entries = Object.entries(progress.attempts || {});
+  if(type === 'flagged'){
+    entries = entries.filter(function(e){ return !e[1].lastCorrect; });
+  }
 }
 entries.sort(function(a,b){ return Number(a[0]) - Number(b[0]); });
 
-document.getElementById('pageTitle').textContent = type === 'flagged' ? 'Currently Flagged Questions' : 'Answered Questions (All-Time)';
+const titles = {
+  answered: 'Answered Questions (All-Time)',
+  flagged: 'Currently Flagged Questions',
+  bookmarked: 'Bookmarked Questions'
+};
+document.getElementById('pageTitle').textContent = titles[type];
 document.getElementById('pageSubtitle').textContent = 'CPA GSL Mock Exam Practice — 409 Questions';
-document.title = (type === 'flagged' ? 'Flagged Questions' : 'Answered Questions') + ' — CPA GSL Mock Exam';
+document.title = titles[type] + ' — CPA GSL Mock Exam';
 
-document.getElementById('summaryText').textContent = entries.length
-  ? (entries.length + (entries.length === 1 ? ' question' : ' questions'))
-  : '';
+function refreshSummary(){
+  document.getElementById('summaryText').textContent = entries.length
+    ? (entries.length + (entries.length === 1 ? ' question' : ' questions'))
+    : '';
+}
+refreshSummary();
 
 const list = document.getElementById('reviewList');
 
-if(entries.length === 0){
-  const empty = document.createElement('div');
-  empty.className = 'empty-state';
-  empty.textContent = type === 'flagged'
-    ? 'No flagged questions right now, nice work! Answer some questions incorrectly and they will show up here.'
-    : 'No questions answered yet. Go back to the quiz and start a practice session.';
-  list.appendChild(empty);
-} else {
-  entries.forEach(function(entry){
-    const qn = Number(entry[0]);
-    const att = entry[1];
-    const q = QUIZ_DATA.find(function(x){ return x.n === qn; });
-    if(!q) return;
+const emptyMessages = {
+  answered: 'No questions answered yet. Go back to the quiz and start a practice session.',
+  flagged: 'No flagged questions right now, nice work! Answer some questions incorrectly and they will show up here.',
+  bookmarked: 'No bookmarked questions yet. While practicing, tap the star next to a question to bookmark it for later review.'
+};
 
-    const row = document.createElement('div');
-    row.className = 'review-row ' + (att.lastCorrect ? 'correct' : 'incorrect');
+function renderEmptyIfNeeded(){
+  list.innerHTML = '';
+  if(entries.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = emptyMessages[type];
+    list.appendChild(empty);
+    return true;
+  }
+  return false;
+}
 
-    const top = document.createElement('div');
-    top.className = 'rr-top';
-    const pickedLabel = att.lastPicked ? ('You answered ' + att.lastPicked) : '';
-    top.innerHTML = '<span><span class="rr-icon">' + (att.lastCorrect ? '✔' : '✘') + '</span> Q' + q.n + ' &middot; ' + q.module + (pickedLabel ? ' &middot; ' + pickedLabel : '') + '</span>';
+function buildRow(entry){
+  const qn = Number(entry[0]);
+  const att = entry[1];
+  const q = QUIZ_DATA.find(function(x){ return x.n === qn; });
+  if(!q) return null;
 
-    const stemEl = document.createElement('div');
-    stemEl.className = 'rr-stem';
-    stemEl.textContent = q.stem;
+  const isBookmarked = !!progress.bookmarks[qn];
 
-    const detail = document.createElement('div');
-    detail.className = 'review-detail';
-    const letters = ['A','B','C','D'];
-    let optsHtml = '';
-    letters.forEach(function(letter, idx){
-      let cls = '';
-      if(letter === q.correct) cls = 'correctopt';
-      else if(letter === att.lastPicked) cls = 'pickedwrong';
-      optsHtml += '<div class="opt-line ' + cls + '">' + letter + '. ' + q.options[idx] + '</div>';
+  const row = document.createElement('div');
+  row.className = 'review-row ' + (att ? (att.lastCorrect ? 'correct' : 'incorrect') : 'bookmarked');
+
+  const top = document.createElement('div');
+  top.className = 'rr-top';
+  const icon = att ? (att.lastCorrect ? '✔' : '✘') : '★';
+  const pickedLabel = att ? (att.lastPicked ? ('You answered ' + att.lastPicked) : '') : 'Not yet answered';
+  let topHtml = '<span><span class="rr-icon">' + icon + '</span> Q' + q.n + ' &middot; ' + q.module + (pickedLabel ? ' &middot; ' + pickedLabel : '') + '</span>';
+  if(type === 'bookmarked'){
+    topHtml += '<button class="unbookmark-btn" type="button" data-qn="' + q.n + '">Remove bookmark</button>';
+  } else if(isBookmarked){
+    topHtml += '<span class="bk-tag">&#9733; bookmarked</span>';
+  }
+  top.innerHTML = topHtml;
+
+  const stemEl = document.createElement('div');
+  stemEl.className = 'rr-stem';
+  stemEl.textContent = q.stem;
+
+  const detail = document.createElement('div');
+  detail.className = 'review-detail';
+  const letters = ['A','B','C','D'];
+  let optsHtml = '';
+  letters.forEach(function(letter, idx){
+    let cls = '';
+    if(letter === q.correct) cls = 'correctopt';
+    else if(att && letter === att.lastPicked) cls = 'pickedwrong';
+    optsHtml += '<div class="opt-line ' + cls + '">' + letter + '. ' + q.options[idx] + '</div>';
+  });
+  const quoteHtml = q.quote ? ('<p class="quote">“' + q.quote + '”</p>') : '';
+  detail.innerHTML = optsHtml
+    + '<p class="expl">' + q.explanation + '</p>'
+    + quoteHtml
+    + '<p class="src">' + formatSource(q) + '</p>';
+
+  row.appendChild(top);
+  row.appendChild(stemEl);
+  row.appendChild(detail);
+  row.addEventListener('click', function(e){
+    if(e.target.classList.contains('unbookmark-btn')) return;
+    detail.classList.toggle('open');
+  });
+
+  if(type === 'bookmarked'){
+    const btn = top.querySelector('.unbookmark-btn');
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      delete progress.bookmarks[qn];
+      saveProgress(progress);
+      entries = entries.filter(function(en){ return Number(en[0]) !== qn; });
+      refreshSummary();
+      row.remove();
+      if(entries.length === 0) renderEmptyIfNeeded();
     });
-    const quoteHtml = q.quote ? ('<p class="quote">“' + q.quote + '”</p>') : '';
-    detail.innerHTML = optsHtml
-      + '<p class="expl">' + q.explanation + '</p>'
-      + quoteHtml
-      + '<p class="src">' + formatSource(q) + '</p>';
+  }
 
-    row.appendChild(top);
-    row.appendChild(stemEl);
-    row.appendChild(detail);
-    row.addEventListener('click', function(){ detail.classList.toggle('open'); });
-    list.appendChild(row);
+  return row;
+}
+
+if(!renderEmptyIfNeeded()){
+  entries.forEach(function(entry){
+    const row = buildRow(entry);
+    if(row) list.appendChild(row);
   });
 }
 </script>
