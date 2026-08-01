@@ -172,6 +172,8 @@
     <div class="setup-grid">
       <div class="chip active" id="shuffleToggle">🔀 Shuffle questions</div>
       <div class="chip" id="reviewToggle">📌 Review missed questions only</div>
+      <div class="chip" id="unansweredToggle">🆕 Unanswered questions only</div>
+      <div class="chip" id="bookmarkedToggle">&#9733; Bookmarked questions only</div>
     </div>
 
     <div class="row" style="margin-top:16px;">
@@ -282,6 +284,16 @@ document.getElementById('reviewToggle').addEventListener('click', function(){
   reviewOnly = !reviewOnly;
   this.classList.toggle('active', reviewOnly);
 });
+let unansweredOnly = false;
+document.getElementById('unansweredToggle').addEventListener('click', function(){
+  unansweredOnly = !unansweredOnly;
+  this.classList.toggle('active', unansweredOnly);
+});
+let bookmarkedOnly = false;
+document.getElementById('bookmarkedToggle').addEventListener('click', function(){
+  bookmarkedOnly = !bookmarkedOnly;
+  this.classList.toggle('active', bookmarkedOnly);
+});
 
 document.getElementById('resetProgressBtn').addEventListener('click', ()=>{
   if(confirm('Clear all saved progress and stats stored in this browser?')){
@@ -368,6 +380,20 @@ function startSession(){
     });
     if(pool.length===0){
       alert('No flagged questions in this filter yet — answer some questions first, or turn off review mode.');
+      return;
+    }
+  }
+  if(unansweredOnly){
+    pool = pool.filter(q => !progress.attempts[q.n]);
+    if(pool.length===0){
+      alert('No unanswered questions in this filter — looks like you\'ve answered everything here already!');
+      return;
+    }
+  }
+  if(bookmarkedOnly){
+    pool = pool.filter(q => !!(progress.bookmarks && progress.bookmarks[q.n]));
+    if(pool.length===0){
+      alert('No bookmarked questions in this filter yet — bookmark some questions first while practicing.');
       return;
     }
   }
